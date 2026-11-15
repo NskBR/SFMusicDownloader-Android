@@ -23,9 +23,10 @@ import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipFile
 
-data class UpdateOffer(val version: String, val tag: String, val notes: String, val name: String, val url: String, val size: Long, val sha256: String, val abi: String)
+data class UpdateOffer(val version: String, val tag: String, val notes: String, val name: String, val url: String, val size: Long, val sha256: String, val abi: String, val versionCode: Long = 0)
 enum class UpdatePhase { IDLE, CHECKING, CURRENT, AVAILABLE, DOWNLOADING, VERIFYING, READY, AUTHORIZATION, ERROR }
 data class UpdateState(val phase: UpdatePhase = UpdatePhase.IDLE, val offer: UpdateOffer? = null, val progress: Float = 0f, val message: String = "", val lastChecked: Long = 0)
+val UpdateState.hasUpdate: Boolean get() = offer != null
 
 object UpdateRules {
     fun version(value: String): List<Int>? = Regex("^v?(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$").matchEntire(value)?.groupValues?.drop(1)?.map { it.toIntOrNull() ?: return null }
@@ -51,6 +52,7 @@ class UpdateRepository(private val context: Context, private val downloads: Down
     private var startupChecked = false
     private val client = OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(40, TimeUnit.SECONDS).callTimeout(30, TimeUnit.MINUTES)
         .followRedirects(false).followSslRedirects(false).build()
+    private val metadata = UpdateMetadataClient(client.newBuilder().callTimeout(30, TimeUnit.SECONDS).build())
     private val folder get() = File(context.cacheDir, "updates").apply { mkdirs() }
     private val apk get() = File(folder, "sfmd-update.apk")
     private val partial get() = File(folder, "sfmd-update.apk.part")
@@ -70,38 +72,19 @@ class UpdateRepository(private val context: Context, private val downloads: Down
             } else check()
         }
     }
-    suspend fun check() {
+    suspend fun check() = performCheck(force = false)
+    suspend fun checkNow() = performCheck(force = true)
+    private suspend fun performCheck(force: Boolean) {
         if (!checkLock.tryLock()) return
         try {
             if (state.value.phase in setOf(UpdatePhase.DOWNLOADING, UpdatePhase.VERIFYING, UpdatePhase.READY, UpdatePhase.AUTHORIZATION)) return
-            mutable.value = state.value.copy(phase = UpdatePhase.CHECKING, message = "Consultando GitHub Releases…")
+            mutable.value = state.value.copy(phase = UpdatePhase.CHECKING, message = "Verificando atualizações…")
             val offer = withContext(Dispatchers.IO) {
-                val request = Request.Builder().url("https://api.github.com/repos/NskBR/SFMusicDownloader-Android/releases/latest")
-                    .header("Accept", "application/vnd.github+json").header("User-Agent", "SFMD/${BuildConfig.VERSION_NAME}").build()
-                client.newCall(request).execute().use { response ->
-                    if (response.code == 404) return@withContext null
-                    check(response.isSuccessful) { if (response.code == 403 || response.code == 429) "Limite do GitHub atingido. Tente novamente mais tarde." else "Não foi possível consultar as releases (${response.code})." }
-                    val body = response.body ?: error("Resposta vazia do GitHub.")
-                    val json = JSONObject(body.string())
-                    val tag = json.getString("tag_name")
-                    check(!json.optBoolean("draft") && !json.optBoolean("prerelease") && tag.startsWith("v") && UpdateRules.version(tag) != null) { "A release publicada não é uma versão estável válida." }
-                    if (!UpdateRules.newer(tag, BuildConfig.VERSION_NAME)) return@withContext null
-                    val installedAbi = context.applicationInfo.nativeLibraryDir.let { if (it.contains("x86_64")) "x86_64" else "arm64-v8a" }
-                    check(installedAbi in Build.SUPPORTED_ABIS) { "A arquitetura instalada não é compatível com este dispositivo." }
-                    val name = "SFMD_${tag.removePrefix("v")}_${installedAbi}.apk"
-                    val assets = json.getJSONArray("assets")
-                    val asset = (0 until assets.length()).map { assets.getJSONObject(it) }.firstOrNull { it.optString("name") == name }
-                        ?: error("A versão $tag ainda não tem APK para $installedAbi.")
-                    val digest = asset.optString("digest")
-                    check(Regex("sha256:[a-fA-F0-9]{64}").matches(digest)) { "Publicação incompleta: falta o SHA-256 do APK na API do GitHub." }
-                    val url = asset.getString("browser_download_url")
-                    check(UpdateRules.validAssetUrl(url, tag, name)) { "A URL da atualização não pertence à release esperada." }
-                    val size = asset.getLong("size")
-                    check(size in 1..maxBytes) { "O tamanho do APK está fora do limite permitido." }
-                    UpdateOffer(tag.removePrefix("v"), tag, json.optString("body"), name, url, size, digest.removePrefix("sha256:").lowercase(), installedAbi)
-                }
+                val installedAbi = context.applicationInfo.nativeLibraryDir.let { if (it.contains("x86_64")) "x86_64" else "arm64-v8a" }
+                check(installedAbi in Build.SUPPORTED_ABIS) { "A arquitetura instalada não é compatível com este dispositivo." }
+                metadata.latest(force)?.offerFor(BuildConfig.VERSION_NAME, installedAbi)
             }
-            mutable.value = UpdateState(if (offer != null) UpdatePhase.AVAILABLE else UpdatePhase.CURRENT, offer, message = if (offer == null) "Nenhuma atualização estável disponível." else "Uma nova versão está disponível.", lastChecked = System.currentTimeMillis())
+            mutable.value = UpdateState(if (offer != null) UpdatePhase.AVAILABLE else UpdatePhase.CURRENT, offer, message = if (offer == null) "Nenhuma versão mais recente disponível para a versão ${BuildConfig.VERSION_NAME}." else "Uma nova versão está disponível.", lastChecked = System.currentTimeMillis())
         } catch (e: Exception) { if (e is CancellationException) throw e; mutable.value = state.value.copy(phase = UpdatePhase.ERROR, message = e.message ?: "Falha ao consultar atualizações.") }
         finally { checkLock.unlock() }
     }
@@ -157,7 +140,7 @@ class UpdateRepository(private val context: Context, private val downloads: Down
                     verify(partial, offer)
                     if (apk.exists()) check(apk.delete())
                     check(partial.renameTo(apk)) { "Não foi possível finalizar o APK." }
-                    offerFile.writeText(JSONObject().apply { put("version", offer.version); put("tag", offer.tag); put("notes", offer.notes); put("name", offer.name); put("url", offer.url); put("size", offer.size); put("sha256", offer.sha256); put("abi", offer.abi) }.toString())
+                    offerFile.writeText(JSONObject().apply { put("version", offer.version); put("tag", offer.tag); put("notes", offer.notes); put("name", offer.name); put("url", offer.url); put("size", offer.size); put("sha256", offer.sha256); put("abi", offer.abi); put("versionCode", offer.versionCode) }.toString())
                 }
                 mutable.value = state.value.copy(phase = UpdatePhase.READY, progress = 1f, message = "Integridade e assinatura verificadas.")
             } catch (e: Exception) {
@@ -182,6 +165,7 @@ class UpdateRepository(private val context: Context, private val downloads: Down
         val code = if (Build.VERSION.SDK_INT >= 28) candidate.longVersionCode else candidate.versionCode.toLong()
         val current = if (Build.VERSION.SDK_INT >= 28) installed.longVersionCode else installed.versionCode.toLong()
         check(code > current) { "O versionCode não é superior ao instalado." }
+        check(offer.versionCode == 0L || code == offer.versionCode) { "O versionCode do APK difere do update.json." }
         fun signatures(info: android.content.pm.PackageInfo): Set<String> = (if (Build.VERSION.SDK_INT >= 28) info.signingInfo?.apkContentsSigners else info.signatures)?.map { hex(MessageDigest.getInstance("SHA-256").digest(it.toByteArray())) }?.toSet().orEmpty()
         val original = signatures(installed)
         check(original.isNotEmpty() && original == signatures(candidate)) { "Assinatura diferente. A instalação atual foi preservada." }
@@ -190,7 +174,7 @@ class UpdateRepository(private val context: Context, private val downloads: Down
     private fun readOffer(): UpdateOffer? {
         if (!offerFile.exists()) return null
         val j = JSONObject(offerFile.readText())
-        return UpdateOffer(j.getString("version"), j.getString("tag"), j.optString("notes"), j.getString("name"), j.getString("url"), j.getLong("size"), j.getString("sha256"), j.getString("abi")).also { check(UpdateRules.validAssetUrl(it.url, it.tag, it.name)) }
+        return UpdateOffer(j.getString("version"), j.getString("tag"), j.optString("notes"), j.getString("name"), j.getString("url"), j.getLong("size"), j.getString("sha256"), j.getString("abi"), j.optLong("versionCode")).also { check(UpdateRules.validAssetUrl(it.url, it.tag, it.name)) }
     }
     suspend fun installationIntent(): Intent? {
         check(!downloads.busy) { "Aguarde as consultas, downloads e conversões terminarem antes de instalar." }

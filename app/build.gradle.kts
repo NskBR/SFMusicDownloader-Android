@@ -9,8 +9,8 @@ android {
         applicationId = "com.nsk.sfmd"
         minSdk = 26
         targetSdk = 37
-        versionCode = providers.gradleProperty("sfmdVersionCode").orElse("2").get().toInt()
-        versionName = providers.gradleProperty("sfmdVersion").orElse("0.1.1").get()
+        versionCode = providers.gradleProperty("sfmdVersionCode").orElse("3").get().toInt()
+        versionName = providers.gradleProperty("sfmdVersion").orElse("0.1.2").get()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     splits { abi { isEnable = true; reset(); include("arm64-v8a", "x86_64"); isUniversalApk = false } }
@@ -35,6 +35,7 @@ dependencies {
     annotationProcessor("androidx.room:room-compiler:2.8.4")
     implementation("androidx.datastore:datastore-preferences:1.1.7")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     // API 37 removed InputManager.getInstance; older Espresso cannot inject UI events.
     androidTestImplementation("androidx.test:runner:1.8.0-alpha04")
     androidTestImplementation("androidx.test:rules:1.8.0-alpha04")

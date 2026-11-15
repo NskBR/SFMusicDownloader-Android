@@ -17,10 +17,10 @@ O script gera `release/SFMD_0.1.0_arm64-v8a.apk`, `release/SFMD_0.1.0_x86_64.apk
 Repositório: `NskBR/SFMusicDownloader-Android`. Tag estável `vMAJOR.MINOR.PATCH`, sem prerelease. Cada versão deve aumentar também `versionCode`.
 
 1. Compilar, assinar e verificar os dois APKs.
-2. Criar release em rascunho com os nomes exatos previstos pelo atualizador, notas e SHA256SUMS.txt.
+2. Criar release em rascunho com os nomes exatos previstos pelo atualizador, notas, SHA256SUMS.txt e `update.json` gerado a partir dos APKs assinados. Ver `UPDATE-MANIFEST.md`.
 3. Associar o commit do código-fonte correspondente, inventário de componentes, licenças e instruções para obter os fontes dos binários.
 4. Conferir assinatura, versão, tamanho e arquitetura. Não publicar chaves ou senhas.
-5. Publicar somente depois da revisão. Verificar por acesso anônimo a API `/releases/latest` e os downloads.
+5. Publicar somente depois da revisão. Verificar anonimamente o link `/releases/latest/download/update.json` e os downloads. A API `/releases/latest` permanece como alternativa para clientes antigos, sujeita à sua cota.
 6. Exigir `digest` SHA-256 na resposta de cada asset. Sem digest o app considera a publicação incompleta.
 7. Testar N → N+1, preservando DataStore, Room, parciais e URIs finais. Conferir bloqueio da instalação durante tarefas.
 

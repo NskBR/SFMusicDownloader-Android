@@ -127,7 +127,12 @@ class MainActivity : ComponentActivity() {
                 if (settings || history) IconButton(onClick = { settings = false; history = false }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Voltar") }
                 else Image(painterResource(R.drawable.sf_logo), "Logo SFMD", Modifier.size(49.dp))
                 Column(Modifier.weight(1f).padding(start = 9.dp)) {
-                    Text(if (settings) "Configurações" else if (history) "Downloads" else "SFMD", fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (settings) "Configurações" else if (history) "Downloads" else "SFMD", fontSize = 25.sp, fontWeight = FontWeight.Bold)
+                        if (!settings && !history && update.hasUpdate) Text("Atualização disponível", color = Green, fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold, lineHeight = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f).padding(start = 8.dp).clickable { settings = true })
+                    }
                     if (!settings && !history) Text("SFMusicDownloader", color = Muted, fontSize = 11.sp)
                 }
                 if (!settings) IconButton(onClick = { settings = true }) { BadgedBox(badge = { if (update.offer != null) Badge(containerColor = Red) }) { Icon(Icons.Outlined.Settings, "Configurações", Modifier.size(26.dp)) } }
@@ -413,7 +418,7 @@ private fun openMedia(context: Context, task: DownloadTask, share: Boolean) {
                         runCatching { vm.app.updates.installationIntent()?.let(installer::launch) }.onFailure { vm.app.updates.returnedFromInstaller(); Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() }
                     } })
                 }
-                else -> OutlinedButton(onClick = { scope.launch { vm.app.updates.check() } }, modifier = Modifier.fillMaxWidth()) { Text("Verificar atualizações") }
+                else -> OutlinedButton(onClick = { scope.launch { vm.app.updates.checkNow() } }, modifier = Modifier.fillMaxWidth()) { Text("Verificar atualizações") }
             }
             if (update.lastChecked > 0) Text("Última consulta: ${java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT, java.util.Locale.forLanguageTag("pt-BR")).format(java.util.Date(update.lastChecked))}", fontSize = 10.sp, color = Muted)
             Text("O Android pede sua autorização para instalar. Seus dados são preservados quando a assinatura é a mesma.", color = Muted, fontSize = 11.sp)

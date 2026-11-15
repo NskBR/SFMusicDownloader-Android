@@ -1,3 +1,11 @@
+# 0.1.2 — em desenvolvimento, sem APK gerado
+
+- A consulta principal de atualização usa `releases/latest/download/update.json`. A API pública é consultada somente se o arquivo estiver indisponível.
+- Cache de cinco minutos para consultas automáticas; o botão Verificar atualizações força uma consulta nova. Não são incluídos tokens ou credenciais no aplicativo.
+- O aviso verde “Atualização disponível” aparece ao lado de SFMD e abre as configurações de atualização.
+- O build release local passa a gerar `update.json` a partir dos APKs assinados, com tamanhos e hashes reais. É necessário anexar esse arquivo a cada release estável.
+- As verificações de pacote, ABI, versão, SHA-256 e mesma assinatura continuam obrigatórias. O versionCode do manifesto também é confrontado com o APK.
+
 # 0.1.1
 
 - Ao enfileirar, fecha o resultado e limpa o campo de URL; a tarefa permanece na lista de downloads.

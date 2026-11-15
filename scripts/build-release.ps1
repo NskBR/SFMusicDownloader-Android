@@ -1,8 +1,9 @@
 param(
     [Parameter(Mandatory=$true)][string]$KeyStore,
     [string]$Alias = 'sfmd',
-    [string]$Version = '0.1.1',
-    [int]$VersionCode = 2,
+    [string]$Version = '0.1.2',
+    [int]$VersionCode = 3,
+    [string]$ReleaseNotes = '',
     [string]$Sdk = "$env:LOCALAPPDATA\Android\Sdk"
 )
 $ErrorActionPreference = 'Stop'
@@ -26,4 +27,5 @@ try {
         if ($LASTEXITCODE) { throw "Assinatura inválida: $abi." }
     }
     Get-ChildItem $out -Filter "SFMD_${Version}_*.apk" | ForEach-Object { '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name } | Set-Content (Join-Path $out 'SHA256SUMS.txt') -Encoding ascii
+    & (Join-Path $PSScriptRoot 'new-update-manifest.ps1') -Version $Version -VersionCode $VersionCode -ApkDirectory $out -Notes $ReleaseNotes
 } finally { Pop-Location }
