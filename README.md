@@ -30,6 +30,8 @@ $env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'
 .\gradlew.bat :app:assembleDebug :app:testDebugUnitTest
 ```
 
+O build de entrega é local. O workflow do GitHub Actions fica disponível somente para execução manual; push e pull request não disparam builds automáticos.
+
 Os APKs são separados por ABI: `app/build/outputs/apk/debug/app-arm64-v8a-debug.apk` e `app-x86_64-debug.apk`. Android mínimo declarado: API 26. No Android 10+, Download usa MediaStore sem acesso geral ao armazenamento. No Android 8/9, o destino padrão pede a permissão de armazenamento; uma pasta SAF pode ser escolhida como alternativa.
 
 ## Prova do motor
