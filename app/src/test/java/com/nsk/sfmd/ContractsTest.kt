@@ -32,5 +32,8 @@ class ContractsTest {
         assertEquals("SFMD", cleanFilename("..."))
         assertEquals("Minha música", cleanFilename("Minha música.mp3"))
         assertFalse(cleanFilename("a/b:c").contains('/'))
+        val unicode = cleanFilename("🎵𝐌𝐢𝐜𝐡𝐚𝐞𝐥".repeat(30))
+        assertTrue(unicode.toByteArray(Charsets.UTF_8).size <= 160)
+        assertFalse(unicode.last().isHighSurrogate())
     }
 }

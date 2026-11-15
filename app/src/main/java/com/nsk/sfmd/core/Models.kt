@@ -46,10 +46,21 @@ fun validMediaUrl(text: String): Boolean = runCatching {
     uri.scheme in listOf("https", "http") && !uri.host.isNullOrBlank() && uri.userInfo == null
 }.getOrDefault(false)
 fun extractSharedUrl(text: String) = Regex("https?://[^\\s<>]+", RegexOption.IGNORE_CASE).find(text)?.value?.trimEnd('.', ',', ')', ']') ?: text.trim()
-fun cleanFilename(input: String): String = input
-    .replace(Regex("\\.(mp4|mkv|webm|mp3|m4a|opus|ogg|flac|wav)$", RegexOption.IGNORE_CASE), "")
-    .replace(Regex("[\\p{Cntrl}\\\\/:*?\"<>|]+"), "_")
-    .take(120).trim(' ', '.').ifBlank { "SFMD" }
+fun cleanFilename(input: String): String {
+    val safe = input.replace(Regex("\\.(mp4|mkv|webm|mp3|m4a|opus|ogg|flac|wav)$", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("[\\p{Cntrl}\\\\/:*?\"<>|]+"), "_").trim(' ', '.')
+    val output = StringBuilder()
+    var offset = 0
+    var bytes = 0
+    while (offset < safe.length) {
+        val point = safe.codePointAt(offset)
+        val character = String(Character.toChars(point))
+        val size = character.toByteArray(Charsets.UTF_8).size
+        if (bytes + size > 160) break
+        output.append(character); bytes += size; offset += Character.charCount(point)
+    }
+    return output.toString().trim(' ', '.').ifBlank { "SFMD" }
+}
 fun formatBytes(bytes: Long): String = when {
     bytes >= 1024L * 1024 * 1024 -> "%.1f GB".format(bytes / (1024.0 * 1024 * 1024))
     bytes >= 1024 * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024))

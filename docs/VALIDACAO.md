@@ -12,6 +12,8 @@ O FFmpeg de `io.github.junkfood02...:ffmpeg:0.18.1` falhou no emulador de 16 KB 
 
 Isso valida x86_64 nos dois tamanhos de página. ARM64 e o comportamento dos binários em Android 8/9 ainda exigem testes físicos ou imagens apropriadas.
 
+A prova foi repetida em instalação limpa do APK release assinado no emulador 16 KB e passou em 58,6 s. Os resultados foram publicados diretamente em `content://media/external/downloads/`: MP4 com áudio/vídeo e MP3 válido. O APK de instrumentação foi assinado com a mesma chave apenas para executar as verificações; não fornece componentes de download ao aplicativo.
+
 ## URLs fornecidas pelo usuário
 
 | Fonte e tipo | Consulta | Download com áudio | Evidência |
