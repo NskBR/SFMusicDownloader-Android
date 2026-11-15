@@ -1,4 +1,4 @@
-# 0.1.2 — em desenvolvimento, sem APK gerado
+# 0.1.2
 
 - A consulta principal de atualização usa `releases/latest/download/update.json`. A API pública é consultada somente se o arquivo estiver indisponível.
 - Cache de cinco minutos para consultas automáticas; o botão Verificar atualizações força uma consulta nova. Não são incluídos tokens ou credenciais no aplicativo.

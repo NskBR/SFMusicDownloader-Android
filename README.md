@@ -12,7 +12,7 @@ Aplicativo Android nativo em Kotlin e Jetpack Compose, com interface em portugu�
 - Pedido de permissões na primeira abertura; rascunho independente de cada aba; seleção dos primeiros 100 itens de playlists.
 - Destino padrão na pasta **Download** do dispositivo. Configurações independentes para a pasta de vídeos e a pasta de músicas. O destino é capturado ao enfileirar a tarefa.
 - Atualizador GitHub Releases: versões numéricas, ABI, streaming, tamanho, SHA-256, pacote, versionCode e assinatura. Instalação pelo Android, bloqueada enquanto houver tarefas ativas.
-- Próxima versão 0.1.2: consulta pelo asset público `update.json` sem consumir a cota da API, com API como alternativa, cache de cinco minutos e aviso verde no cabeçalho. Ainda sem APK dessa versão.
+- A partir da 0.1.2: consulta pelo asset público `update.json` sem consumir a cota da API, com API como alternativa, cache de cinco minutos e aviso verde no cabeçalho.
 
 É uma versão inicial. Os resultados de teste e as pendências estão em [docs/VALIDACAO.md](docs/VALIDACAO.md). Um recurso implementado não implica que todos os sites ou todas as versões Android tenham sido validados.
 

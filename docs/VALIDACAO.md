@@ -1,5 +1,7 @@
 # Validação — SFMD 0.1.0
 
+Atualização 0.1.2 (15/11/2026): 12 testes unitários passaram, incluindo sete testes de manifesto, cache, alternativa da API, redirects, tamanho e rejeição de dados inválidos. Android Lint passou sem erros. `UpdateHeaderTest` confirmou a consulta real de `update.json` público (release 0.1.1 na ocasião), o estado atualizado na instalação 0.1.2 e a presença do texto verde e navegação para Configurações usando uma oferta de teste injetada. A captura visual foi conferida localmente e não é parte da release. O motor de mídia não foi alterado nesta versão.
+
 Data: 15/11/2026. Ambiente: Windows, Android SDK 37, emuladores x86_64. Nenhum aparelho físico ARM64 estava conectado. Não confundir APK ARM64 compilado com APK ARM64 testado em aparelho.
 
 ## Motor
