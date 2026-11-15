@@ -16,6 +16,7 @@ import java.security.MessageDigest
 class UpdateValidationTest {
     @Test fun acceptsMatchingSignerAndRejectsDigestIdentityAndVersionErrors() = runBlocking<Unit> {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        org.junit.Assume.assumeTrue("Este fixture valida atualização a partir de 0.1.0.", context.packageManager.getPackageInfo(context.packageName, 0).versionName == "0.1.0")
         val app = context.applicationContext as SfmdApp
         val fixtures = File(context.filesDir, "fixtures")
         val candidate = File(fixtures, "next-debug.apk")

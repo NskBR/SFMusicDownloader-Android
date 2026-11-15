@@ -41,11 +41,13 @@ class DownloadRepository(private val context: Context, val engine: YtDlpEngine, 
         tasksState.value = (tasksState.value.filterNot { it.id == task.id } + task).sortedByDescending { it.createdAt }
         if (save) withContext(Dispatchers.IO) { persist(task) }
     }
-    suspend fun enqueue(info: MediaInfo, tab: MediaTab, format: String, height: Int, bitrate: Int, metadata: Boolean, outputName: String = info.title) {
+    suspend fun enqueue(info: MediaInfo, tab: MediaTab, format: String, height: Int, bitrate: Int, metadata: Boolean, outputName: String = info.title, allowRedownload: Boolean = false) {
         loaded.await()
         lock.withLock {
             check(!installing.value) { "Aguarde o retorno da instalação da atualização." }
-            if (tasks.value.any { it.url == info.url && it.tab == tab && it.format == format && it.height == height && !it.state.terminal }) return
+            val sameMedia = tasks.value.filter { mediaIdentity(it.url) == mediaIdentity(info.url) && it.tab == tab }
+            if (sameMedia.any { it.state.active || it.state == TaskState.QUEUED }) return
+            if (!allowRedownload && sameMedia.any { it.state == TaskState.COMPLETED }) throw AlreadyDownloadedException()
             val task = DownloadTask(url = info.url, title = info.title, thumbnail = info.thumbnail, tab = tab, format = format, height = height, bitrate = bitrate, metadata = metadata, destination = preferences.value.folderFor(tab), outputName = cleanFilename(outputName))
             withContext(Dispatchers.IO) { persist(task) }
             tasksState.value = listOf(task) + tasksState.value

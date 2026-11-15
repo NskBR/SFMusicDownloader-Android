@@ -82,6 +82,7 @@ class MainActivity : ComponentActivity() {
     val tasks by vm.app.downloads.tasks.collectAsStateWithLifecycle()
     val preferences by vm.app.preferences.collectAsStateWithLifecycle()
     val pendingShare by vm.pendingShare.collectAsStateWithLifecycle()
+    val pendingRedownload by vm.pendingRedownload.collectAsStateWithLifecycle()
     val update by vm.app.updates.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -189,6 +190,12 @@ class MainActivity : ComponentActivity() {
         }
     }
     playlist?.let { info -> PlaylistDialog(info, onDismiss = { playlist = null }, onConfirm = { chosen -> chosen.forEach { beginDownload(it) }; playlist = null }) }
+    pendingRedownload?.let { request -> AlertDialog(
+        onDismissRequest = vm::dismissRedownload,
+        title = { Text(if (request.tab == MediaTab.MUSIC) "Música já baixada" else "Vídeo já baixado") },
+        text = { Text(if (request.tab == MediaTab.MUSIC) "Você já baixou esta música. Deseja baixar novamente?" else "Você já baixou este vídeo. Deseja baixar novamente?") },
+        confirmButton = { TextButton(onClick = vm::confirmRedownload) { Text("Baixar novamente") } },
+        dismissButton = { TextButton(onClick = vm::dismissRedownload) { Text("Cancelar") } }) }
     if (pendingShare != null && preferences.permissionSetupDone) AlertDialog(
         onDismissRequest = { vm.pendingShare.value = null },
         icon = { Icon(Icons.Outlined.FileDownload, null, tint = Red) },
@@ -274,7 +281,7 @@ class MainActivity : ComponentActivity() {
             }
             Text(if (state.format == "original") "Áudio sem conversão. Capa não é incorporada neste modo." else "A conversão mantém os limites de qualidade da fonte.", color = Muted, fontSize = 10.sp)
         }
-        AccentButton(if (info.entries.isNotEmpty()) "Selecionar itens" else if (tab == MediaTab.VIDEO) "Baixar vídeo" else "Baixar música", Icons.Outlined.FileDownload, onClick = onDownload)
+        AccentButton(if (state.enqueuing) "Adicionando à fila…" else if (info.entries.isNotEmpty()) "Selecionar itens" else if (tab == MediaTab.VIDEO) "Baixar vídeo" else "Baixar música", Icons.Outlined.FileDownload, enabled = !state.enqueuing, onClick = onDownload)
     }
 }
 

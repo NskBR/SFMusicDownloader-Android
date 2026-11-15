@@ -5,6 +5,19 @@ import java.net.URI
 import java.util.UUID
 
 enum class MediaTab(val label: String) { VIDEO("Vídeo"), MUSIC("Música") }
+class AlreadyDownloadedException : Exception("Esta mídia já foi baixada.")
+fun mediaIdentity(url: String): String = runCatching {
+    val uri = URI(url)
+    val host = uri.host.orEmpty().lowercase().removePrefix("www.").removePrefix("m.")
+    if (host == "youtu.be") "youtube:" + uri.path.trim('/')
+    else if (host == "youtube.com" || host == "music.youtube.com") {
+        val id = uri.rawQuery.orEmpty().split('&').firstOrNull { it.startsWith("v=") }?.substringAfter('=')
+            ?: uri.rawQuery.orEmpty().split('&').firstOrNull { it.startsWith("list=") }?.let { "playlist:" + it.substringAfter('=') }
+            ?: uri.path.removePrefix("/shorts/").removePrefix("/embed/").trim('/')
+        "youtube:$id"
+    } else host + uri.path.orEmpty().trimEnd('/') +
+        if (host == "instagram.com" || host == "tiktok.com") "" else uri.rawQuery?.let { "?$it" }.orEmpty()
+}.getOrDefault(url)
 enum class TaskState(val label: String) {
     QUEUED("Na fila"), PREPARING("Preparando"), DOWNLOADING("Baixando"), PROCESSING("Processando"),
     SAVING("Salvando"), COMPLETED("Concluído"), PAUSED("Pausado"), CANCELED("Cancelado"), INTERRUPTED("Interrompido"), FAILED("Falhou");

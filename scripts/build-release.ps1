@@ -1,8 +1,8 @@
 param(
     [Parameter(Mandatory=$true)][string]$KeyStore,
     [string]$Alias = 'sfmd',
-    [string]$Version = '0.1.0',
-    [int]$VersionCode = 1,
+    [string]$Version = '0.1.1',
+    [int]$VersionCode = 2,
     [string]$Sdk = "$env:LOCALAPPDATA\Android\Sdk"
 )
 $ErrorActionPreference = 'Stop'

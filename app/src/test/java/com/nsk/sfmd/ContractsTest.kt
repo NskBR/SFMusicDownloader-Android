@@ -6,6 +6,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ContractsTest {
+    @Test fun duplicatesRecognizeSharedYoutubeLinksButKeepDifferentMediaSeparate() {
+        assertEquals(mediaIdentity("https://youtu.be/abc?si=tracking"), mediaIdentity("https://www.youtube.com/watch?v=abc&t=2"))
+        assertNotEquals(mediaIdentity("https://example.com/watch?id=1"), mediaIdentity("https://example.com/watch?id=2"))
+        assertEquals(mediaIdentity("https://www.instagram.com/reel/abc/?igsh=tracking"), mediaIdentity("https://www.instagram.com/reel/abc/"))
+    }
     @Test fun versionsCompareNumericallyAndRejectPrereleases() {
         assertTrue(UpdateRules.newer("v1.10.0", "1.9.9"))
         assertFalse(UpdateRules.newer("v1.0.0", "1.0.0"))

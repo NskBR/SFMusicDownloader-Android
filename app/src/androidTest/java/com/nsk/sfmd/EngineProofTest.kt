@@ -20,7 +20,14 @@ class EngineProofTest {
         val diagnostic = engine.diagnostics()
         Log.i("SFMD_PROOF", diagnostic)
         assertTrue(diagnostic.contains("2026.10.26"))
+        val initialStart = android.os.SystemClock.elapsedRealtime()
         val media = withTimeout(120_000) { engine.query(source, "proof-query") }
+        val firstMs = android.os.SystemClock.elapsedRealtime() - initialStart
+        val cachedStart = android.os.SystemClock.elapsedRealtime()
+        assertEquals(media, engine.query(source, "proof-query-cached"))
+        val cachedMs = android.os.SystemClock.elapsedRealtime() - cachedStart
+        Log.i("SFMD_PROOF", "QUERY_TIMING: first=${firstMs}ms; cached=${cachedMs}ms")
+        assertTrue("Consulta recente deve vir do cache", cachedMs < 1000)
         assertTrue(media.title.isNotBlank())
         Log.i("SFMD_PROOF", "QUERY: ${media.title}; formats=${media.formats.size}; platform=${media.platform}")
         val videoTask = DownloadTask(url = source, title = media.title, thumbnail = media.thumbnail, tab = MediaTab.VIDEO, format = "mp4", height = 360)
@@ -34,7 +41,7 @@ class EngineProofTest {
         retriever.release()
         val videoUri = FileStore(context).publish(video, MediaTab.VIDEO, "")
         Log.i("SFMD_PROOF", "VIDEO: ${video.name}; bytes=${video.length()}; URI=$videoUri")
-        val audioTask = videoTask.copy(id = "proof-audio", tab = MediaTab.MUSIC, format = "mp3", metadata = true)
+        val audioTask = videoTask.copy(id = "proof-audio", tab = MediaTab.MUSIC, format = "mp3", metadata = true, outputName = "Minha música SFMD 100%")
         val audioDir = File(context.cacheDir, "proof-audio")
         val audio = withTimeout(240_000) { engine.download(audioTask, audioDir) {} }
         assertEquals("mp3", audio.extension)
@@ -42,6 +49,7 @@ class EngineProofTest {
         val audioRetriever = android.media.MediaMetadataRetriever()
         audioRetriever.setDataSource(audio.path)
         assertEquals("yes", audioRetriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO))
+        assertEquals("Minha música SFMD 100%", audioRetriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_TITLE))
         audioRetriever.release()
         val audioUri = FileStore(context).publish(audio, MediaTab.MUSIC, "")
         Log.i("SFMD_PROOF", "AUDIO: ${audio.name}; bytes=${audio.length()}; URI=$audioUri")

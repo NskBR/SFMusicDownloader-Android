@@ -7,13 +7,17 @@ import com.nsk.sfmd.core.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
-data class TabState(val url: String = "", val loading: Boolean = false, val info: MediaInfo? = null, val error: String = "", val height: Int = 0, val format: String = "", val bitrate: Int = 192, val filename: String = "")
+data class TabState(val url: String = "", val loading: Boolean = false, val info: MediaInfo? = null, val error: String = "", val height: Int = 0, val format: String = "", val bitrate: Int = 192, val filename: String = "", val enqueuing: Boolean = false)
+data class PendingDownload(val tab: MediaTab, val media: MediaInfo, val format: String, val height: Int, val bitrate: Int, val metadata: Boolean, val name: String)
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     val app = application as SfmdApp
     private val states = MutableStateFlow(MediaTab.entries.associateWith { TabState() })
     val tabs = states.asStateFlow()
     val selected = MutableStateFlow(MediaTab.VIDEO)
     val pendingShare = MutableStateFlow<String?>(null)
+    val pendingRedownload = MutableStateFlow<PendingDownload?>(null)
+    private val redownloadQueue = ArrayDeque<PendingDownload>()
+    private val submitting = mutableSetOf<String>()
     private val queries = mutableMapOf<MediaTab, Job>()
     fun change(tab: MediaTab, transform: (TabState) -> TabState) { states.value = states.value + (tab to transform(states.value.getValue(tab))) }
     fun url(tab: MediaTab, text: String) { if (queries[tab]?.isActive == true) cancelQuery(tab); change(tab) { it.copy(url = text, info = null, error = "") } }
@@ -44,7 +48,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun download(tab: MediaTab, info: MediaInfo? = null) {
         val state = states.value.getValue(tab)
         val media = info ?: state.info ?: return
-        viewModelScope.launch { try { app.downloads.enqueue(media, tab, state.format.ifBlank { if (tab == MediaTab.MUSIC) "mp3" else "mp4" }, state.height, state.bitrate, app.preferences.value.metadata, if (info != null) media.title else state.filename) }
-            catch (e: Exception) { change(tab) { it.copy(error = readableError(e)) } } }
+        submit(PendingDownload(tab, media, state.format.ifBlank { if (tab == MediaTab.MUSIC) "mp3" else "mp4" }, state.height, state.bitrate, app.preferences.value.metadata, if (info != null) media.title else state.filename))
+    }
+    fun confirmRedownload() {
+        val request = pendingRedownload.value ?: return
+        dismissRedownload()
+        submit(request, true)
+    }
+    fun dismissRedownload() { pendingRedownload.value = redownloadQueue.removeFirstOrNull() }
+    private fun submit(request: PendingDownload, confirmed: Boolean = false) {
+        val key = "${request.tab}:${mediaIdentity(request.media.url)}"
+        if (!submitting.add(key)) return
+        change(request.tab) { it.copy(enqueuing = true) }
+        viewModelScope.launch {
+            try {
+                app.downloads.enqueue(request.media, request.tab, request.format, request.height, request.bitrate, request.metadata, request.name, confirmed)
+                change(request.tab) { current ->
+                    if (current.info?.url == request.media.url || current.info?.entries?.isNotEmpty() == true)
+                        current.copy(info = null, url = "", filename = "", error = "") else current
+                }
+            } catch (e: AlreadyDownloadedException) {
+                if (pendingRedownload.value == null) pendingRedownload.value = request else redownloadQueue.addLast(request)
+            }
+            catch (e: Exception) { change(request.tab) { it.copy(error = readableError(e)) } }
+            finally { submitting.remove(key); change(request.tab) { it.copy(enqueuing = false) } }
+        }
     }
 }

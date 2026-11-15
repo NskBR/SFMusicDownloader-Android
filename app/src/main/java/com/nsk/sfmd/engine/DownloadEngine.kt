@@ -35,6 +35,10 @@ class YtDlpEngine(private val context: Context) : DownloadEngine {
     private data class Running(val process: Process, @Volatile var group: Int = 0)
     private val running = ConcurrentHashMap<String, Running>()
     private val workers = Executors.newCachedThreadPool { r -> Thread(r, "sfmd-engine").apply { isDaemon = true } }
+    private data class CachedMedia(val info: MediaInfo, val time: Long)
+    private val infoCache = object : LinkedHashMap<String, CachedMedia>(16, .75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedMedia>?) = size > 16
+    }
 
     override suspend fun initialize(): String = mutex.withLock {
         withContext(Dispatchers.IO) {
@@ -70,7 +74,7 @@ class YtDlpEngine(private val context: Context) : DownloadEngine {
         suspendCancellableCoroutine { continuation ->
             val bootstrap = "import os,runpy;os.setsid();print('SFMD_PID:'+str(os.getpid()),flush=True);runpy.run_module('yt_dlp',run_name='__main__')"
             val command = listOf(File(nativeDir, "libpython.so").path, "-u", "-c", bootstrap) + listOf(
-                "--ignore-config", "--no-cache-dir", "--no-colors", "--socket-timeout", "25", "--retries", "3",
+                "--ignore-config", "--cache-dir", File(context.cacheDir, "ytdlp").path, "--no-colors", "--socket-timeout", "25", "--retries", "3",
                 "--js-runtimes", "quickjs:${File(nativeDir, "libqjs.so")}", "--ffmpeg-location", File(nativeDir, "libffmpeg.so").path
             ) + args
             val builder = ProcessBuilder(command).redirectErrorStream(true)
@@ -114,15 +118,25 @@ class YtDlpEngine(private val context: Context) : DownloadEngine {
     override fun cancel(id: String) { running[id]?.let(::terminate) }
 
     override suspend fun query(url: String, id: String): MediaInfo {
-        initialize()
         require(validMediaUrl(url)) { "Cole uma URL HTTP ou HTTPS válida." }
+        val key = mediaIdentity(url)
+        synchronized(infoCache) {
+            infoCache[key]?.takeIf { android.os.SystemClock.elapsedRealtime() - it.time < 5 * 60_000 }?.let { return it.info }
+        }
+        initialize()
         val host = android.net.Uri.parse(url).host.orEmpty().lowercase()
         if (host == "open.spotify.com" || host.endsWith(".spotify.com") || host == "music.apple.com" || host.endsWith("deezer.com")) {
             error("Este serviço fornece catálogo ou conteúdo protegido. A busca em outra fonte ainda não está implementada. Cole o link da fonte de áudio ou de um vídeo.")
         }
-        val out = execute(id, listOf("--dump-single-json", "--skip-download", "--flat-playlist", "--playlist-end", "100", "--", url))
+        val options = mutableListOf("--dump-single-json", "--skip-download", "--flat-playlist", "--playlist-end", "100", "--no-check-formats",
+            "--socket-timeout", "15", "--retries", "1", "--extractor-retries", "1")
+        if (key.startsWith("youtube:") && !key.startsWith("youtube:playlist:") &&
+            (host == "youtu.be" || android.net.Uri.parse(url).path.orEmpty().let { it == "/watch" || it.startsWith("/shorts/") || it.startsWith("/embed/") })) options += "--no-playlist"
+        val out = execute(id, options + listOf("--", url))
         val json = out.lineSequence().firstOrNull { it.startsWith("{") } ?: error("A fonte não retornou informações de mídia.")
-        return parseMedia(JSONObject(json), url)
+        return parseMedia(JSONObject(json), url).also { info ->
+            synchronized(infoCache) { infoCache[key] = CachedMedia(info, android.os.SystemClock.elapsedRealtime()) }
+        }
     }
     private fun parseMedia(j: JSONObject, fallback: String): MediaInfo {
         val entries = j.optJSONArray("entries")
@@ -142,6 +156,8 @@ class YtDlpEngine(private val context: Context) : DownloadEngine {
         val args = mutableListOf("--no-playlist", "--newline", "--continue", "--windows-filenames", "--trim-filenames", "160",
             "--progress-template", "download:SFMD_PROGRESS:%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s",
             "--print", "after_move:SFMD_FILE:%(filepath)s", "-o", File(directory, cleanFilename(task.outputName.ifBlank { task.title }).replace("%", "%%") + ".%(ext)s").path)
+        // Replace metadata before postprocessing; argument lists preserve spaces and accents.
+        args += listOf("--replace-in-metadata", "title", "(?s)^.*$", task.outputName.ifBlank { task.title }.replace("\\", "\\\\"), "--parse-metadata", "title:%(meta_title)s", "--embed-metadata")
         if (task.tab == MediaTab.MUSIC) {
             args += listOf("-f", "bestaudio/best")
             if (task.format != "original") {
@@ -149,7 +165,6 @@ class YtDlpEngine(private val context: Context) : DownloadEngine {
                 if (task.format == "mp3" || task.format == "m4a" || task.format == "opus") args += listOf("--audio-quality", "${task.bitrate}K")
             }
             if (task.metadata) {
-                args += "--embed-metadata"
                 if (task.format != "original") args += "--embed-thumbnail"
             }
         } else {
