@@ -3,6 +3,7 @@
 - Mostra bytes, percentual quando o tamanho é conhecido e velocidade quando o servidor fornece dados suficientes.
 - Mantém o estado Preparando até o início da transferência.
 - Baixa até quatro fragmentos em paralelo nas fontes compatíveis.
+- Teste confirmado pelo usuário no celular após instalar a 0.1.3 estável por cima da versão de teste. A porcentagem e a velocidade apareceram durante o download.
 
 Instale por cima da versão anterior para preservar seus dados. Quem instalou a 0.1.3 de teste pode atualizar abrindo o APK estável diretamente.
 
