@@ -35,7 +35,7 @@ class YtDlpEngine(private val context: Context) : DownloadEngine {
     private data class Running(val process: Process, @Volatile var group: Int = 0)
     private val running = ConcurrentHashMap<String, Running>()
     private val workers = Executors.newCachedThreadPool { r -> Thread(r, "sfmd-engine").apply { isDaemon = true } }
-    private data class CachedMedia(val info: MediaInfo, val time: Long)
+    private data class CachedMedia(val info: MediaInfo, val time: Long, val sourceJson: String?)
     private val infoCache = object : LinkedHashMap<String, CachedMedia>(16, .75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, CachedMedia>?) = size > 16
     }
@@ -134,8 +134,18 @@ class YtDlpEngine(private val context: Context) : DownloadEngine {
             (host == "youtu.be" || android.net.Uri.parse(url).path.orEmpty().let { it == "/watch" || it.startsWith("/shorts/") || it.startsWith("/embed/") })) options += "--no-playlist"
         val out = execute(id, options + listOf("--", url))
         val json = out.lineSequence().firstOrNull { it.startsWith("{") } ?: error("A fonte não retornou informações de mídia.")
-        return parseMedia(JSONObject(json), url).also { info ->
-            synchronized(infoCache) { infoCache[key] = CachedMedia(info, android.os.SystemClock.elapsedRealtime()) }
+        val extracted = JSONObject(json)
+        if (!validMediaUrl(extracted.optString("webpage_url"))) extracted.put("webpage_url", url)
+        return parseMedia(extracted, url).also { info ->
+            // Flat playlist entries lack the complete download information.
+            val sourceJson = extracted.toString().takeIf {
+                info.entries.isEmpty() && info.formats.isNotEmpty() && it.length <= 2 * 1024 * 1024
+            }
+            val cached = CachedMedia(info, android.os.SystemClock.elapsedRealtime(), sourceJson)
+            synchronized(infoCache) {
+                infoCache[key] = cached
+                infoCache[mediaIdentity(info.url)] = cached
+            }
         }
     }
     private fun parseMedia(j: JSONObject, fallback: String): MediaInfo {
@@ -157,7 +167,7 @@ class YtDlpEngine(private val context: Context) : DownloadEngine {
         val args = mutableListOf("--no-playlist", "--newline", "--continue", "--progress", "--progress-delta", "0.25",
             "--concurrent-fragments", "4", "--windows-filenames", "--trim-filenames", "160",
             "--progress-template", "download:SFMD_PROGRESS:%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s",
-            "--print", "after_move:SFMD_FILE:%(filepath)s", "-o", File(directory, cleanFilename(task.outputName.ifBlank { task.title }).replace("%", "%%") + ".%(ext)s").path)
+            "--print", "post_process:SFMD_STAGE:PROCESSING", "--print", "after_move:SFMD_FILE:%(filepath)s", "-o", File(directory, cleanFilename(task.outputName.ifBlank { task.title }).replace("%", "%%") + ".%(ext)s").path)
         // Replace metadata before postprocessing; argument lists preserve spaces and accents.
         args += listOf("--replace-in-metadata", "title", "(?s)^.*$", task.outputName.ifBlank { task.title }.replace("\\", "\\\\"), "--parse-metadata", "title:%(meta_title)s", "--embed-metadata")
         if (task.tab == MediaTab.MUSIC) {
@@ -174,24 +184,47 @@ class YtDlpEngine(private val context: Context) : DownloadEngine {
             val selector = if (task.format == "mp4") "bv*$height[ext=mp4]+ba[ext=m4a]/b$height[ext=mp4]/b$height" else "bv*$height+ba/b$height"
             args += listOf("-f", selector, "--merge-output-format", task.format, "--remux-video", task.format)
         }
-        args += listOf("--", task.url)
+        // Direct URLs can expire. Reuse only a recent, complete consultation.
+        val cached = synchronized(infoCache) {
+            infoCache[mediaIdentity(task.url)]?.takeIf {
+                android.os.SystemClock.elapsedRealtime() - it.time in 0 until 2 * 60_000L
+            }
+        }
+        val sourceJson = cached?.sourceJson
+        val infoFile = File(directory, "source.info.json")
         var result: File? = null
-        var latest = task.copy(bytes = 0, total = 0, speed = 0, eta = -1, progress = 0f)
-        execute(task.id, args) { line ->
-            when {
-                line.startsWith("SFMD_PROGRESS:") -> {
-                    val numbers = line.removePrefix("SFMD_PROGRESS:").split('|').map { it.toDoubleOrNull()?.toLong() ?: 0L }
-                    if (numbers.size == 5) {
-                        val total = numbers[1].takeIf { it > 0 } ?: numbers[2]
-                        latest = latest.copy(state = TaskState.DOWNLOADING, bytes = numbers[0], total = total, speed = numbers[3], eta = numbers[4], progress = if (total > 0) (numbers[0].toFloat() / total).coerceIn(0f, 1f) else 0f)
+        var latest = task.copy(state = TaskState.PREPARING, bytes = 0, total = 0, speed = 0, eta = -1, progress = 0f)
+        try {
+            if (sourceJson != null) {
+                withContext(Dispatchers.IO) { infoFile.writeText(sourceJson, Charsets.UTF_8) }
+                args += listOf("--abort-on-error", "--load-info-json", infoFile.path)
+            } else {
+                args += listOf("--", task.url)
+            }
+            execute(task.id, args) { line ->
+                when {
+                    line.startsWith("SFMD_PROGRESS:") -> {
+                        val numbers = line.removePrefix("SFMD_PROGRESS:").split('|').map { it.toDoubleOrNull()?.toLong() ?: 0L }
+                        if (numbers.size == 5) {
+                            val total = numbers[1].takeIf { it > 0 } ?: numbers[2]
+                            latest = latest.copy(state = TaskState.DOWNLOADING, bytes = numbers[0], total = total, speed = numbers[3], eta = numbers[4], progress = if (total > 0) (numbers[0].toFloat() / total).coerceIn(0f, 1f) else 0f)
+                            progress(latest)
+                        }
+                    }
+                    line == "SFMD_STAGE:PROCESSING" || line.startsWith("[Merger]") || line.startsWith("[ExtractAudio]") || line.startsWith("[EmbedThumbnail]") || line.startsWith("[Metadata]") -> {
+                        latest = latest.copy(state = TaskState.PROCESSING, speed = 0); progress(latest)
+                    }
+                    // yt-dlp retries the webpage itself if saved information has expired.
+                    sourceJson != null && line.startsWith("WARNING: The info failed to download:") -> {
+                        synchronized(infoCache) { infoCache.entries.removeAll { it.value === cached } }
+                        latest = task.copy(state = TaskState.PREPARING, bytes = 0, total = 0, speed = 0, eta = -1, progress = 0f)
                         progress(latest)
                     }
+                    line.startsWith("SFMD_FILE:") -> result = File(line.removePrefix("SFMD_FILE:").trim())
                 }
-                line.startsWith("[Merger]") || line.startsWith("[ExtractAudio]") || line.startsWith("[EmbedThumbnail]") || line.startsWith("[Metadata]") -> {
-                    latest = latest.copy(state = TaskState.PROCESSING, speed = 0); progress(latest)
-                }
-                line.startsWith("SFMD_FILE:") -> result = File(line.removePrefix("SFMD_FILE:").trim())
             }
+        } finally {
+            withContext(NonCancellable + Dispatchers.IO) { infoFile.delete() }
         }
         return result?.takeIf { it.isFile && it.length() > 0 && it.canonicalPath.startsWith(directory.canonicalPath + File.separator) }
             ?: error("O motor terminou sem produzir um arquivo válido.")

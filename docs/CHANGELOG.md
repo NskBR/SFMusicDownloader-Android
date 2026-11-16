@@ -1,3 +1,12 @@
+# 0.1.4
+
+- Reduz o tempo em Preparando reutilizando os dados completos de uma consulta feita nos últimos dois minutos, sem extrair novamente a página antes de baixar.
+- Se o link de mídia tiver expirado, renova a consulta automaticamente. Playlists e consultas sem dados completos mantêm o fluxo normal.
+- Sinaliza a etapa Processando durante a conversão e a finalização do arquivo.
+- Validação no emulador: início da transferência de um vídeo passou de 11,0 segundos para 0,5 segundo; MP3 iniciou em 0,6 segundo. Tempos variam conforme a plataforma e a rede.
+- Teste Android confirmou recuperação de link expirado, qualidade de vídeo, áudio, título personalizado e limpeza dos dados temporários. Testes unitários e Lint passaram.
+
+Atualização compatível por cima da 0.1.3, preservando os dados.
 # 0.1.3
 
 - Mostra bytes, percentual quando o tamanho é conhecido e velocidade quando o servidor fornece dados suficientes.
