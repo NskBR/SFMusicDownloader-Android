@@ -1,3 +1,11 @@
+# 0.1.3
+
+- Mostra bytes, percentual quando o tamanho é conhecido e velocidade quando o servidor fornece dados suficientes.
+- Mantém o estado Preparando até o início da transferência.
+- Baixa até quatro fragmentos em paralelo nas fontes compatíveis.
+
+Instale por cima da versão anterior para preservar seus dados. Quem instalou a 0.1.3 de teste pode atualizar abrindo o APK estável diretamente.
+
 # 0.1.2
 
 - A consulta principal de atualização usa `releases/latest/download/update.json`. A API pública é consultada somente se o arquivo estiver indisponível.

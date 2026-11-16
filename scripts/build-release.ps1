@@ -1,8 +1,8 @@
 param(
     [Parameter(Mandatory=$true)][string]$KeyStore,
     [string]$Alias = 'sfmd',
-    [string]$Version = '0.1.2',
-    [int]$VersionCode = 3,
+    [string]$Version = '0.1.3',
+    [int]$VersionCode = 5,
     [string]$ReleaseNotes = '',
     [string]$Sdk = "$env:LOCALAPPDATA\Android\Sdk"
 )

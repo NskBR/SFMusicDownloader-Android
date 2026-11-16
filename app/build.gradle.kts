@@ -9,8 +9,8 @@ android {
         applicationId = "com.nsk.sfmd"
         minSdk = 26
         targetSdk = 37
-        versionCode = providers.gradleProperty("sfmdVersionCode").orElse("3").get().toInt()
-        versionName = providers.gradleProperty("sfmdVersion").orElse("0.1.2").get()
+        versionCode = providers.gradleProperty("sfmdVersionCode").orElse("5").get().toInt()
+        versionName = providers.gradleProperty("sfmdVersion").orElse("0.1.3").get()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     splits { abi { isEnable = true; reset(); include("arm64-v8a", "x86_64"); isUniversalApk = false } }

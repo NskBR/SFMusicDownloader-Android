@@ -153,7 +153,9 @@ class YtDlpEngine(private val context: Context) : DownloadEngine {
     override suspend fun download(task: DownloadTask, directory: File, progress: (DownloadTask) -> Unit): File {
         initialize(); directory.mkdirs()
         check(directory.usableSpace > 100L * 1024 * 1024) { "Libere espaço no armazenamento antes de baixar." }
-        val args = mutableListOf("--no-playlist", "--newline", "--continue", "--windows-filenames", "--trim-filenames", "160",
+        // --print enables quiet mode. Request progress explicitly so the app receives transfer metrics.
+        val args = mutableListOf("--no-playlist", "--newline", "--continue", "--progress", "--progress-delta", "0.25",
+            "--concurrent-fragments", "4", "--windows-filenames", "--trim-filenames", "160",
             "--progress-template", "download:SFMD_PROGRESS:%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s",
             "--print", "after_move:SFMD_FILE:%(filepath)s", "-o", File(directory, cleanFilename(task.outputName.ifBlank { task.title }).replace("%", "%%") + ".%(ext)s").path)
         // Replace metadata before postprocessing; argument lists preserve spaces and accents.
@@ -174,8 +176,7 @@ class YtDlpEngine(private val context: Context) : DownloadEngine {
         }
         args += listOf("--", task.url)
         var result: File? = null
-        var latest = task.copy(state = TaskState.DOWNLOADING)
-        progress(latest)
+        var latest = task.copy(bytes = 0, total = 0, speed = 0, eta = -1, progress = 0f)
         execute(task.id, args) { line ->
             when {
                 line.startsWith("SFMD_PROGRESS:") -> {
